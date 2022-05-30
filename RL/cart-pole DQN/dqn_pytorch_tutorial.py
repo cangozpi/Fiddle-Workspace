@@ -1,5 +1,6 @@
 # ********************************
-# Tutorial from: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+# Modified Tutorial from: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+# Start tensorboard using: $tensorboard --logdir logs
 # ********************************
 from modulefinder import Module
 import gym
@@ -14,13 +15,18 @@ from PIL import Image
 import torch
 from torch import nn # for nn.Module
 import torchvision.transforms as T
+import tensorflow as tf
+
 
 # Possible actions: 'right', 'left'
 # model input: difference of two states(image frames)
 # CNNs are chosen
 
+# Tensorboard
+log_dir, run_name = "logs/", "cartpole_training"
+tb_file_writer = tf.summary.create_file_writer(log_dir+run_name)
 
-
+# create gym env
 env = gym.make('CartPole-v0').unwrapped
 
 # ================ forget about this part
@@ -29,7 +35,7 @@ is_ipython = 'inline' in matplotlib.get_backend()
 if is_ipython:
     from IPython import display
 
-plt.ion()
+# plt.ion()
 
 # if gpu is to be used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -145,6 +151,7 @@ EPS_START = 0.9
 EPS_END = 0.05
 EPS_DECAY = 200
 TARGET_UPDATE = 10
+lr = 1e-4
 
 # Get screen size so that we can initialize layers correctly based on shape
 # returned from AI gym. Typical dimensions at this point are close to 3x40x90
@@ -162,7 +169,7 @@ target_net = DQN(screen_height, screen_width, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval() # target network won't be trained it would be used for Q(s_new, a) prediction in TD Error
 
-optimizer = torch.optim.Adam(policy_net.parameters())
+optimizer = torch.optim.Adam(policy_net.parameters(), lr=lr)
 memory = ReplayMemory(10000)
 
 
@@ -171,6 +178,7 @@ steps_done = 0
 
 def select_action(state):
     global steps_done
+    global eps_threshold
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
         math.exp(-1. * steps_done / EPS_DECAY)
@@ -210,7 +218,7 @@ def plot_durations():
 # =================
 
 # ================ Optimization Function Definition:
-def optimize_model():
+def optimize_model(episode_num):
     # If Replay Buffer does not contain at least batch_size many data then do not optimize the network
     if len(memory) < BATCH_SIZE: 
         return
@@ -249,13 +257,21 @@ def optimize_model():
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
         loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
-
+        
         # Optimize the model
         optimizer.zero_grad()
         loss.backward()
         for param in policy_net.parameters():
             param.grad.data.clamp_(-1, 1) # clip gradients for stability (vanishing/exploding gradients problem)
         optimizer.step()
+
+        # log to Tensorboard
+        mean_loss = float(loss.mean())
+        mean_td_target = float(expected_state_action_values.mean())
+        with tb_file_writer.as_default():
+            tf.summary.scalar('training loss per optimization', mean_loss, episode_num)
+            tf.summary.scalar('mean TD Target per optimization', mean_td_target, episode_num)
+
 # ===============
 
 # ============ Training Loop
@@ -287,10 +303,14 @@ for i_episode in range(num_episodes):
         state = next_state
 
         # Perform one step of the optimization (on the policy network)
-        optimize_model()
+        optimize_model(i_episode)
         if done:
+            # log training informations  at the end of each epoch.
+            with tb_file_writer.as_default():
+                tf.summary.scalar('episode reward', t+1, step=i_episode)
+                tf.summary.scalar('Decayed EPSILON', eps_threshold, step=i_episode)
             episode_durations.append(t + 1)
-            plot_durations()
+            # plot_durations()
             break
     # Update the target network, copying all weights and biases in DQN
     if i_episode % TARGET_UPDATE == 0:
@@ -299,6 +319,6 @@ for i_episode in range(num_episodes):
 print('Complete')
 env.render()
 env.close()
-plt.ioff()
-plt.show()
+# plt.ioff()
+# plt.show()
 # ================
