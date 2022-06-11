@@ -1,9 +1,8 @@
 # ********************************
-# Note that PG methods cannot make use of Replay Buffer like Q learning \
-# algorithms: https://ai.stackexchange.com/questions/21109/how-does-being-on-policy-prevent-us-from-using-the-replay-buffer-with-the-policy
 # Modified Tutorial from: https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 # Start tensorboard using: $tensorboard --logdir logs
 # ********************************
+from modulefinder import Module
 import gym
 import math
 import random
@@ -50,10 +49,7 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'reward')) # (s_old, a, s_new, r)
 
 
-
-
-
-# ======== Policy Network Model Definition:
+# ======== Model Definition:
 class PolicyNetwork(nn.Module):
 
     def __init__(self, h, w, outputs):
@@ -74,7 +70,7 @@ class PolicyNetwork(nn.Module):
         convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h))) # height after passing through Conv2d for 3 times
         linear_input_size = convw * convh * 32 # Flattened dimension for the Dense layer = C*W*H
         self.head = nn.Linear(linear_input_size, outputs) # Note that outputs would be the possible actions for Q values (i.e. 'right', 'left')
-        self.head_activation = nn.Softmax() # Softmax is used to return a probability distribution over action space
+        self.head_activation = nn.Softmax(dim=1) # to convert probability distribution over the action space
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
@@ -135,7 +131,7 @@ def get_screen():
 # ================
 
 #  =============== TRAINING
-BATCH_SIZE = 128
+BATCH_SIZE = 1 # update after every episode terminates!
 GAMMA = 0.999
 EPS_START = 0.9
 EPS_END = 0.05
@@ -153,12 +149,10 @@ _, _, screen_height, screen_width = init_screen.shape # --> [B, C, H, W]
 # Get number of actions from gym action space
 n_actions = env.action_space.n
 
-# Note that for stability purposes we would use two networks inwhich target network is updated by copying the main Q_network time to time
-policy_net = PolicyNetwork(screen_height, screen_width, n_actions).to(device) # Note that despite its name it is a Q network not a policy gradient network
-
+# pi() network
+policy_net = PolicyNetwork(screen_height, screen_width, n_actions).to(device)
 optimizer = torch.optim.Adam(policy_net.parameters(), lr=lr)
-memory = []
-
+rewards_history = []
 
 steps_done = 0
 
@@ -203,51 +197,40 @@ def plot_durations():
         display.display(plt.gcf())
 
 # =================
-
+cur_ep_memory = []
 # ================ Optimization Function Definition:
 def optimize_model(episode_num):
-    
-    # Function to return batched cumulative discounted rewards while calculating Return/Goal
-    def discount_rewards(rewards, gamma=0.99):
-        batched_cum_rewards = []
-        for batch in rewards:
-            r = np.array([gamma**i * batch[i] 
-                for i in range(len(batch))])
-            # Reverse the array direction for cumsum and then
-            # revert back to the original order
-            r = r[::-1].cumsum()[::-1]
-            r - r.mean()
-            batched_cum_rewards.append(r)
-        return batched_cum_rewards # subtract mean for stability purposes this is not mandatory though
-
-
-    # If Replay Buffer does not contain at least batch_size many data then do not optimize the network
-    if len(memory) < BATCH_SIZE: 
-        return
-    else:
-        transitions = memory
+    global times_updated
+    if (episode_num %BATCH_SIZE) == 0: # optimize if certain number of batches are available per update 
+        transitions = cur_ep_memory
         # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
         # detailed explanation). This converts batch-array of Transitions
         # to Transition of batch-arrays.
-        batch = Transition(*zip(*transitions)) # --> (state, action, reward)
+        batch = Transition(*zip(*transitions))
 
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
 
-        # Compute log(pi(a| s)) 
-        log_action_probs = torch.log(policy_net(state_batch).gather(1, action_batch)) # get probability scores for the chosen actions by the policy network
-
-        # Compute Cumulative Rewards ~ R
-        batch_cum_rewards = torch.tensor(discount_rewards(reward_batch))
-
-        # Compute loss ~ E[ grad(log(pi(a|s))) * R ]
-        loss = log_action_probs * batch_cum_rewards # ~ 
-
-
-        criterion = nn.SmoothL1Loss()
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        # Compute log(pi(a|s)) 
+        log_action_probs = torch.log(policy_net(state_batch).gather(1, action_batch.unsqueeze(-1)))
         
+        # Compute R
+        def calc_discounted_cumulative_rewards(rewards_batch, gamma=0.99):
+            batched_cum_rewards = []
+            for batch in rewards_batch:
+                R = [gamma ** i * batch[i] for i in range(batch.shape[0])]
+                R = np.array(R)
+                R = R[::-1].cumsum()[::-1]
+                R -= R.mean() # For stability purposes this is not mandatory for REINFORCE
+                batched_cum_rewards.append(R)
+            return torch.tensor(batched_cum_rewards)
+        
+        batched_cum_rewards = calc_discounted_cumulative_rewards(reward_batch.unsqueeze(0), GAMMA)
+
+        # Compute E[ grad(log(pi(s | a))) * R ]
+        loss = log_action_probs * batched_cum_rewards
+        loss = - loss.mean()
 
         # Optimize the model
         optimizer.zero_grad()
@@ -257,26 +240,26 @@ def optimize_model(episode_num):
         optimizer.step()
 
         # log to Tensorboard
-        mean_loss = float(loss.mean())
-        mean_td_target = float(expected_state_action_values.mean())
+        mean_loss = float(loss.detach().cpu().numpy())
         with tb_file_writer.as_default():
-            tf.summary.scalar('training loss per optimization', mean_loss, episode_num)
-            tf.summary.scalar('mean TD Target per optimization', mean_td_target, episode_num)
+            tf.summary.scalar('Training Loss per optimization', mean_loss, episode_num)
 
 # ===============
 
 # ============ Training Loop
 num_episodes = 1_000
+times_updated = 0
 for i_episode in range(num_episodes):
+    episode_rewards = []
     # Initialize the environment and state
     env.reset()
     last_screen = get_screen()
     current_screen = get_screen()
     state = current_screen - last_screen
-    cur_episode = []
+    cur_ep_memory = []
     for t in count():
         # Select and perform an action
-        action = select_action(state)
+        action = select_action(state).squeeze(1) # --> [1]
         _, reward, done, _ = env.step(action.item())
         reward = torch.tensor([reward], device=device)
 
@@ -286,8 +269,10 @@ for i_episode in range(num_episodes):
         if not done:
             next_state = current_screen - last_screen
             # Store the transition in memory
-            cur_episode.append(state, action, reward) # terminal states are not included
+            cur_ep_memory.append((state.detach().cpu(), action.detach().cpu(), reward.detach().cpu()))
+            episode_rewards.append(reward.item())
         else:
+            rewards_history.append(np.array(episode_rewards).mean())
             next_state = None
 
         # Move to the next state
@@ -296,7 +281,6 @@ for i_episode in range(num_episodes):
         if done:
             # Perform one step of the optimization (on the policy network)
             optimize_model(i_episode)
-
             # log training informations  at the end of each epoch.
             with tb_file_writer.as_default():
                 tf.summary.scalar('episode reward', t+1, step=i_episode)
@@ -304,11 +288,10 @@ for i_episode in range(num_episodes):
             episode_durations.append(t + 1)
             # plot_durations()
             break
-    memory.append(cur_episode)
-    # Update the target network, copying all weights and biases in DQN
-    if i_episode % TARGET_UPDATE == 0:
-        target_net.load_state_dict(policy_net.state_dict())
-
+    # Print running average
+    avg_rewards = np.mean(rewards_history[-100:])
+    print(f"\rEp: {i_episode + 1} Average reward of last 100 episodes = {avg_rewards:.2f}", end="")
+    
 print('Complete')
 env.render()
 env.close()
