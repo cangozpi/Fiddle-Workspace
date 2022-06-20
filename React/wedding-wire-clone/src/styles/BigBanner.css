@@ -1,0 +1,55 @@
+.big-banner{
+    border-bottom: 0.1px solid lightgray;
+    height: 50vh;
+}
+
+.couples_image {
+    background-repeat: 50vw;
+    object-fit: contain;
+    background-repeat: no-repeat;
+}
+
+.left h2 {
+    font-weight: 800;
+}
+
+.left p {
+    font-weight: 400;
+}
+
+.btn-info {
+    color: var(--wedding-wire-bg-color);
+    background-color: var(--wedding-wire-button-color);
+}
+
+#btnGroupAddon {
+    background-color: var(--wedding-wire-bg-color);
+}
+
+.btn-info:hover {
+    background-color: var(--wedding-wire-button-hover-color);
+}
+
+.form-control {
+    border-right: none;
+}
+
+.input-group {
+    height: 3.5rem;
+}
+
+.right {
+    background-image: url("https://cdn1.weddingwire.com/assets/img/home/bg_hero4.jpg");
+    object-fit: contain;
+    background-repeat: no-repeat;
+    background-size: cover;
+    height: 100%;
+    clip-path: polygon(10% 0, 100% 0%, 100% 100%, 0 100%);
+}
+
+
+@media screen and (min-width: 1028px) {
+    .big-banner{
+        height: 40vh;
+    }   
+}

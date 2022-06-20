@@ -1,0 +1,23 @@
+.h2_link {
+    font-size: medium;
+    color: var(--wedding-wire-button-color);
+}
+
+.h2_link {
+    transition: color 0.15s;
+}
+
+.h2_link:hover {
+    color: var(--wedding-wire-button-hover-color);
+}
+
+.p_link {
+    font-weight: 450;
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color .2s;
+}
+
+.p_link:hover {
+    color: var(--wedding-wire-button-hover-color);
+}

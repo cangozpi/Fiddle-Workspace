@@ -1,0 +1,15 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  --wedding-wire-bg-color: #FFFFFF;
+  --wedding-wire-button-color: #19b5bc; 
+  --wedding-wire-button-hover-color: #088F95;
+}
+
+body {
+  background-color: var(--wedding-wire-bg-color);
+}

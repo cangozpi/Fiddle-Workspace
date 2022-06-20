@@ -1,0 +1,95 @@
+.nav {
+    display: flex;
+    justify-content: space-around;
+    width: 100vw;
+    font-size: small;
+    text-transform: uppercase;
+    height: 6rem;
+    align-items: flex-end;
+    border-bottom: 0.1px solid lightgray;
+    /* max-width: 1280px; */
+    margin: auto;
+}
+
+.nav h2 {
+    cursor: pointer;
+}
+
+.logo {
+    padding-bottom: 3vh;
+
+}
+
+.middle_nav > div:nth-child(n) {
+    padding-bottom: 3vh !important;
+}
+
+
+.middle_nav {
+    display: flex;
+    align-items: center;
+}
+
+.middle_nav > div {
+    margin: 0 0.5rem;
+}
+
+.middle_nav h2, .right_nav h2 {
+    font-size: 0.87rem;
+    font-weight:  450;
+}
+
+.right_nav {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    height: 60%;
+    margin-top: auto;
+    margin-bottom: auto;
+}
+
+.authentication_section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--wedding-wire-button-color);
+}
+
+.authentication_section > h2, .question > h2 {
+    transition: color 0.15s;
+}
+
+.authentication_section > h2:hover {
+    color: var(--wedding-wire-button-hover-color);
+}
+
+.authentication_section > h2:first-child {
+    padding-right: 0.5rem;
+}
+
+.question > h2:hover {
+    color: var(--wedding-wire-button-color);
+}
+
+.middle_nav > div:hover {
+    color: var(--wedding-wire-button-color);
+    border-bottom: 2px solid var(--wedding-wire-button-color);
+}
+
+.question {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.question h2 {
+    margin-bottom: 0 !important;
+}
+
+.question > i{
+    display: inline-block;
+    margin-right: .3rem;
+    font-size: 1rem;
+}
