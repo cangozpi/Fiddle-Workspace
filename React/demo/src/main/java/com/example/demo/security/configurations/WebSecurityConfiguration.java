@@ -1,7 +1,8 @@
-package com.example.demo.configurations;
+package com.example.demo.security.configurations;
 
-import com.example.demo.filters.JwtTokenFilter;
+import com.example.demo.security.filters.JwtAuthenticationFilter;
 import com.example.demo.security.services.MyAuthenticationProviders.JwtAuthenticationProvider;
+import com.example.demo.security.services.UserServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,7 +13,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -22,12 +22,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class WebSecurityConfiguration extends WebSecurityConfigurerAdapter {
 
     // Custom filter
-    @Autowired
-    private JwtTokenFilter jwtTokenFilter;
+    @Bean
+    public JwtAuthenticationFilter authenticationTokenFilterBean() throws Exception {
+        return new JwtAuthenticationFilter();
+    }
 
     // Custom UserDetailsService
     @Autowired
-    private UserDetailsService userDetailsService;
+    private UserServiceImpl userDetailsService;
 
     @Autowired
     BCryptPasswordEncoder passwordEncoder;
@@ -53,19 +55,23 @@ public class WebSecurityConfiguration extends WebSecurityConfigurerAdapter {
                 .csrf().disable()
 
                 // giving every permission to every request for /login endpoint
-                .authorizeRequests().antMatchers("/login").permitAll()
+                .authorizeRequests().antMatchers("/users/authenticate", "/users/register").permitAll()
                 // for everything else, the user has to be authenticated
                 .anyRequest().authenticated()
+                //.exceptionHandling().authenticationEntryPoint(unauthorizedEntryPoint).and()
                 // setting stateless session, because we choose to implement Rest API
                 .and().sessionManagement()
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 
         // adding the custom filter before UsernamePasswordAuthenticationFilter in the filter chain
-        http.addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(authenticationTokenFilterBean(), UsernamePasswordAuthenticationFilter.class);
     }
 
     @Override
     protected void configure(AuthenticationManagerBuilder auth) throws Exception {
         auth.authenticationProvider(jwtAuthenticationProvider);
+        /* add other custom authenticationProviders with chaining to above statement like:
+         auth.authenticationProvider(jwtAuthenticationProvider).
+            authenticationProvider(OtherCustomAuthenticationProvider); */
     }
 }
